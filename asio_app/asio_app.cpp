@@ -10,8 +10,19 @@
 int main()
 {
 	boost::asio::io_service io_service;
+	boost::asio::ip::tcp::socket socket(io_service);
+	boost::system::error_code error;
 
-	io_service.run();
+	auto address = boost::asio::ip::address::from_string("127.0.0.1");
+	auto endPoint = boost::asio::ip::tcp::endpoint(address, 33440);
+
+	socket.connect(endPoint, error);
+	if (error)
+	{
+		std::cout << error.message() << std::endl;
+		return 0;
+	}
+
 
 
     return 0;
