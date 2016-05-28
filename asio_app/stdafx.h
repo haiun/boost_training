@@ -2,5 +2,6 @@
 
 #include "targetver.h"
 
-#include <stdio.h>
-#include <tchar.h>
+#include <boost/asio.hpp>
+#include <functional>
+#include <iostream>

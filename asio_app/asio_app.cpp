@@ -2,28 +2,38 @@
 //
 
 #include "stdafx.h"
-#include <boost/system/system_error.hpp>
-#include <boost/asio.hpp>
-#include <iostream>
-#include <vector>
+
+#include "Server.h"
+#include "Client.h"
+
+#include <boost/thread.hpp>
+#include <boost/bind.hpp>
 
 int main()
 {
-	boost::asio::io_service io_service;
-	boost::asio::ip::tcp::socket socket(io_service);
-	boost::system::error_code error;
+	Server server;
+	Client client;
 
-	auto address = boost::asio::ip::address::from_string("127.0.0.1");
-	auto endPoint = boost::asio::ip::tcp::endpoint(address, 33440);
+	boost::thread th1 = boost::thread(boost::bind(&Server::Init, &server));
+	boost::thread th2 = boost::thread(boost::bind(&Client::Init, &client));
 
-	socket.connect(endPoint, error);
-	if (error)
-	{
-		std::cout << error.message() << std::endl;
-		return 0;
-	}
+	th1.join();
+	std::cout << "server.Init()" << std::endl;
 
+	Sleep(1000);
 
+	th2.join();
+	std::cout << "client.Init()" << std::endl;
+
+	Sleep(5000);
+
+	client.Destroy();
+	std::cout << "client.Destroy()" << std::endl;
+
+	Sleep(1000);
+
+	server.Destroy();
+	std::cout << "server.Destroy()" << std::endl;
 
     return 0;
 }
