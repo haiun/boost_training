@@ -15,5 +15,6 @@
     <ClCompile Include="stdafx.cpp" />
     <ClCompile Include="Client.cpp" />
     <ClCompile Include="Server.cpp" />
+    <ClCompile Include="Connection.cpp" />
   </ItemGroup>
 </Project>
