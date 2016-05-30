@@ -10,10 +10,8 @@ void Client::Init()
 
 	service = new boost::asio::io_service();
 
-	pConnection = new Connection();
-	pConnection->socket = new boost::asio::ip::tcp::socket(*service);
-
-	pConnection->socket->async_connect(endPoint, boost::bind(&Client::OnConnect, this, boost::asio::placeholders::error));
+	pConnection = new Connection(*service);
+	pConnection->socket.async_connect(endPoint, boost::bind(&Client::OnConnect, this, boost::asio::placeholders::error));
 
 	service->run();
 }

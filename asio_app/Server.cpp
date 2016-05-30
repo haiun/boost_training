@@ -24,11 +24,10 @@ void Server::Destroy()
 
 void Server::Accept()
 {
-	connection = new Connection();
-	connection->socket = new boost::asio::ip::tcp::socket(acceptor->get_io_service());
+	connection = new Connection(acceptor->get_io_service());
 
 	//start accept
-	acceptor->async_accept(*(connection->socket),
+	acceptor->async_accept(connection->socket,
 		boost::bind(&Server::OnAccept,
 			this,
 			boost::asio::placeholders::error));
