@@ -1,5 +1,6 @@
 #pragma once
 #include <boost/array.hpp>
+#include <boost/atomic/atomic.hpp>
 
 class Connection
 {
@@ -20,4 +21,13 @@ public:
 	boost::system::error_code error;
 	boost::array<char, BUFFERSIZE> readBufer;
 	boost::array<char, BUFFERSIZE> writeBufer;
+};
+
+class RoomConnection : public Connection
+{
+public:
+	RoomConnection(boost::asio::io_service& service) : Connection(service), refRoom(0) {}
+
+public:
+	boost::atomics::atomic_int refRoom;
 };
