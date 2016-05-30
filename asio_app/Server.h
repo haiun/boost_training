@@ -1,6 +1,7 @@
 #pragma once
 
 class Connection;
+class Room;
 
 class Server
 {
@@ -10,6 +11,7 @@ private:
 	boost::system::error_code error;
 	
 	Connection* connection;
+	Room* lobby;
 
 public:
 	void Init();

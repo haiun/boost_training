@@ -1,11 +1,13 @@
 #include "stdafx.h"
 #include "Server.h"
 #include "Connection.h"
-
+#include "Room.h"
 #include <boost/bind.hpp>
 
 void Server::Init()
 {
+	lobby = new Room();
+
 	auto address = boost::asio::ip::address::from_string("127.0.0.1");
 	auto endPoint = boost::asio::ip::tcp::endpoint(address, 12300);
 
