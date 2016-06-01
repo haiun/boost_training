@@ -2,7 +2,6 @@
 #include "Server.h"
 #include "Connection.h"
 #include "Room.h"
-#include <boost/bind.hpp>
 
 void Server::Init()
 {

@@ -4,23 +4,28 @@
 
 class Connection
 {
-	enum { BUFFERSIZE = 512 };
+	enum { LENGTH = 4 };
+	enum { BUFFER = 512 };
 
 public:
 	Connection(boost::asio::io_service& service);
 
 public:
-	void Read();
-	void Send();
+	void RecvLength();
+	void RecvBody(std::size_t bodySize);
+	void Send(void* data, std::size_t size);
+	void Send(boost::asio::mutable_buffer buffer);
 
-	void OnRead(const boost::system::error_code& error, std::size_t byte_transferred);
+	void OnRecvLength(const boost::system::error_code& error, std::size_t byte_transferred);
+	void OnRecvBody(const boost::system::error_code& error, std::size_t byte_transferred);
 	void OnSend(const boost::system::error_code& error, std::size_t byte_transferred);
 
 public:
 	boost::asio::ip::tcp::socket socket;
-	boost::system::error_code error;
-	boost::array<char, BUFFERSIZE> readBufer;
-	boost::array<char, BUFFERSIZE> writeBufer;
+	boost::array<BYTE, LENGTH> recvLengthBuffer;
+	boost::array<BYTE, BUFFER> recvBodyBuffer;
+	BYTE* writeBuffer;
+	boost::lockfree::queue<void*>	sendBufferQueue;
 };
 
 class RoomConnection : public Connection

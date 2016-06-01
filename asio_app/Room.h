@@ -1,8 +1,5 @@
 #pragma once
 
-#include <boost/lockfree/queue.hpp>
-#include <list>
-
 #include "Connection.h"
 
 //Room에 존제하지 않는 Connection은 존재하지 않는다??

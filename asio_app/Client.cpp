@@ -1,7 +1,6 @@
 #include "stdafx.h"
 #include "Client.h"
 #include "Connection.h"
-#include <boost/bind.hpp>
 
 void Client::Init()
 {
