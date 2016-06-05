@@ -9,6 +9,8 @@
     <ClInclude Include="Server.h" />
     <ClInclude Include="Client.h" />
     <ClInclude Include="Connection.h" />
+    <ClInclude Include="Room.h" />
+    <ClInclude Include="packet.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="asio_app.cpp" />

@@ -6,9 +6,6 @@
 #include "Server.h"
 #include "Client.h"
 
-#include <boost/thread.hpp>
-#include <boost/bind.hpp>
-
 int main()
 {
 	Server server;
