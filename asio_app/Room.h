@@ -7,7 +7,7 @@
 
 class Room
 {
-	boost::lockfree::queue<RoomConnection*>	enterQueue;
+	std::queue<RoomConnection*>	enterQueue;
 	std::list<RoomConnection*>				connectionList;
 
 public:

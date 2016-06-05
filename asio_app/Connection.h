@@ -25,7 +25,7 @@ public:
 	boost::array<BYTE, LENGTH> recvLengthBuffer;
 	boost::array<BYTE, BUFFER> recvBodyBuffer;
 	BYTE* writeBuffer;
-	boost::lockfree::queue<void*>	sendBufferQueue;
+	std::queue<void*>	sendBufferQueue;
 };
 
 class RoomConnection : public Connection
