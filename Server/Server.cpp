@@ -53,7 +53,7 @@ private:
 
 			std::cout << "read:" << recvData << std::endl;
 
-			writeMessage = recvBuffer;
+			std::copy(recvBuffer.begin(), recvBuffer.end(), writeMessage.begin());
 
 			boost::asio::async_write(socket(), boost::asio::buffer(writeMessage),
 				boost::bind(&ServerSession::handle_write, this,
