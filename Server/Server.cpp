@@ -4,10 +4,10 @@
 #include <thread>
 #include <iostream>
 
-class Session
+class ServerSession
 {
 public:
-	Session(boost::asio::io_service& service)
+	ServerSession(boost::asio::io_service& service)
 		: socketInstance(service)
 	{
 
@@ -18,13 +18,13 @@ public:
 		return socketInstance;
 	}
 
-	void ReadPost()
+	void PostRead()
 	{
 		memset(&recvBuffer, '\0', sizeof(recvBuffer));
 		socketInstance.async_read_some
 		(
 			boost::asio::buffer(recvBuffer),
-			boost::bind(&Session::handle_read, this, boost::asio::placeholders::error, boost::asio::placeholders::bytes_transferred)
+			boost::bind(&ServerSession::handle_read, this, boost::asio::placeholders::error, boost::asio::placeholders::bytes_transferred)
 		);
 	}
 
@@ -55,9 +55,12 @@ private:
 
 			writeMessage = recvBuffer;
 
-			//boost::asio::async_write()
+			boost::asio::async_write(socket(), boost::asio::buffer(writeMessage),
+				boost::bind(&ServerSession::handle_write, this,
+					boost::asio::placeholders::error,
+					boost::asio::placeholders::bytes_transferred));
 
-			ReadPost();
+			PostRead();
 		}
 	}
 
@@ -66,6 +69,59 @@ private:
 	std::array<char, 128> recvBuffer;
 };
 
+class TCP_Server
+{
+public:
+	TCP_Server(boost::asio::io_service& io_service)
+		: acceptor(io_service, boost::asio::ip::tcp::endpoint(boost::asio::ip::tcp::v4(), 33440))
+		, pSession(nullptr)
+	{
+		StartAccept();
+	}
+
+	~TCP_Server()
+	{
+		if (pSession != nullptr)
+			delete pSession;
+	}
+
+public:
+	void StartAccept()
+	{
+		std::cout << "StartAccept" << std::endl;
+
+		pSession = new ServerSession(acceptor.get_io_service());
+		acceptor.async_accept(pSession->socket(),
+			boost::bind(&TCP_Server::handle_accept, this, pSession, boost::asio::placeholders::error));
+	}
+
+	void handle_accept(ServerSession* pSession, const boost::system::error_code& error)
+	{
+		if (!error)
+		{
+			std::cout << "handle_accept" << std::endl;
+			pSession->PostRead();
+		}
+	}
+
+private:
+	boost::asio::ip::tcp::acceptor acceptor;
+	ServerSession* pSession;
+	int seqNumber;
+};
+
+void main()
+{
+	boost::asio::io_service service;
+	TCP_Server server(service);
+	service.run();
+
+	getchar();
+}
+
+
+
+/*
 int main()
 {
 	boost::asio::io_service service;
@@ -107,4 +163,4 @@ int main()
 
     return 0;
 }
-
+*/
