@@ -6,6 +6,50 @@
 #include <queue>
 
 
+enum PacketEnum
+{
+	NONE,
+	LOGIN,
+	CHAT,
+	END
+};
+
+struct PacketBase
+{
+	unsigned short id;
+	unsigned short size;
+
+	PacketBase(unsigned short _id, unsigned short _size) : id(_id), size(_size) {}
+	~PacketBase() {}
+};
+
+struct LoginPacket : public PacketBase
+{
+	LoginPacket() : PacketBase(LOGIN, sizeof(LoginPacket)) {}
+};
+
+struct ChatPacket : public PacketBase
+{
+	ChatPacket() : PacketBase(CHAT, sizeof(ChatPacket)) {}
+};
+
+class Command
+{
+public:
+	Command(void* _pData, std::size_t _size) : pData(_pData), size(_size) {}
+	~Command() {}
+
+public:
+	Command* Clone()
+	{
+		return new Command(pData, size);
+	}
+
+public:
+	void* pData;
+	std::size_t size;
+};
+
 class WriteCommand
 {
 public:
@@ -32,7 +76,7 @@ public:
 
 public:
 	virtual void CloseSession(const std::size_t sessionID) = 0;
-	virtual void PacketProcess(const std::size_t sessionID, WriteCommand* cmd) = 0;
+	virtual void PacketProcess(const std::size_t sessionID, PacketBase* pPacket) = 0;
 };
 
 class ServerSession
@@ -58,7 +102,7 @@ public:
 
 	void Init()
 	{
-		packetBufferMark = 0;
+		prevLeftByte = 0;
 	}
 
 	boost::asio::ip::tcp::socket& socket()
@@ -70,7 +114,7 @@ public:
 	{
 		socket().async_read_some
 		(
-			boost::asio::buffer(recvBuffer),
+			boost::asio::buffer(readBuffer),
 			boost::bind(&ServerSession::handle_read, this, boost::asio::placeholders::error, boost::asio::placeholders::bytes_transferred)
 		);
 	}
@@ -129,19 +173,34 @@ private:
 		}
 		else
 		{
-			const std::string recvData = recvBuffer.data();
+			const std::string recvData = readBuffer.data();
 
-			std::size_t readDataByte = packetBufferMark + bytes_transferred;
-			std::size_t readData = 0;
+			std::size_t leftByte = prevLeftByte + bytes_transferred;
+			std::size_t readByte = 0;
 
-			const int PACKET_HEAD_SIZE = 8;
-			while (readDataByte > 0)
+			const int PACKET_HEAD_SIZE = sizeof(PacketBase);
+			while (leftByte > 0)
 			{
-				if (readDataByte < PACKET_HEAD_SIZE)
+				if (leftByte < PACKET_HEAD_SIZE)
 					break;
 
-				//if 
+				PacketBase* pHeader = reinterpret_cast<PacketBase*>(&readBuffer[readByte]);
+				unsigned short packetSize = pHeader->size;
+
+				if (packetSize > leftByte)
+					break;
+
+				pServer->PacketProcess(sessionID, pHeader);
+				leftByte -= packetSize;
+				readByte += packetSize;
 			}
+
+			if (leftByte > 0)
+			{
+				memmove_s(&readBuffer[0], leftByte, &readBuffer[readByte], leftByte);
+			}
+
+			prevLeftByte = leftByte;
 
 			PostRead();
 		}
@@ -151,8 +210,8 @@ private:
 	boost::asio::ip::tcp::socket socketInstance;
 	std::queue<WriteCommand*>	writeQueue;
 
-	std::array<char, 128> recvBuffer;
-	std::size_t packetBufferMark;
+	std::array<char, 128> readBuffer;
+	std::size_t prevLeftByte;
 	ServerInterface* pServer;
 };
 
@@ -192,7 +251,7 @@ public:
 
 	void Start()
 	{
-		//PostAccept();
+		PostAccept();
 	}
 
 	void CloseSession(const std::size_t sessionID)
@@ -201,9 +260,16 @@ public:
 		sessionQueue.push_back(sessionID);
 	}
 
-	void PacketProcess(const std::size_t sessionID, WriteCommand* cmd)
+	void PacketProcess(const std::size_t sessionID, PacketBase* pPacket)
 	{
+		switch (pPacket->id)
+		{
+		case LOGIN:
+			break;
 
+		case CHAT:
+			break;
+		}
 	}
 
 private:
