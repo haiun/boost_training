@@ -119,11 +119,11 @@ public:
 		);
 	}
 
-	void PostSend(const bool immediatly, WriteCommand* pCommand)
+	void PostSend(const bool immediately, WriteCommand* pCommand)
 	{
 		WriteCommand* pCurrentCommand = nullptr;
 
-		if (immediatly)
+		if (immediately)
 		{
 			pCurrentCommand = pCommand;
 		}
@@ -133,7 +133,7 @@ public:
 			writeQueue.push(pCurrentCommand);
 		}
 
-		if (!immediatly && writeQueue.size() > 1)
+		if (!immediately && writeQueue.size() > 1)
 			return;
 
 		boost::asio::async_write(socket(), boost::asio::buffer(pCurrentCommand->pData, pCurrentCommand->size),
