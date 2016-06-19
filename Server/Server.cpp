@@ -14,6 +14,7 @@ enum PacketEnum
 	END
 };
 
+#pragma pack(push, 1)
 struct PacketBase
 {
 	unsigned short id;
@@ -21,6 +22,9 @@ struct PacketBase
 
 	PacketBase(unsigned short _id, unsigned short _size) : id(_id), size(_size) {}
 	~PacketBase() {}
+
+	template< typename T >
+	T* Cast() { return reinterpret_cast<T*>(this); }
 };
 
 struct LoginPacket : public PacketBase
@@ -30,42 +34,20 @@ struct LoginPacket : public PacketBase
 
 struct ChatPacket : public PacketBase
 {
+	char message[128];
+
 	ChatPacket() : PacketBase(CHAT, sizeof(ChatPacket)) {}
 };
-
-class Command
-{
-public:
-	Command(void* _pData, std::size_t _size) : pData(_pData), size(_size) {}
-	~Command() {}
-
-public:
-	Command* Clone()
-	{
-		return new Command(pData, size);
-	}
-
-public:
-	void* pData;
-	std::size_t size;
-};
+#pragma pack(pop, 1)
 
 class WriteCommand
 {
 public:
-	WriteCommand(void* _pData, std::size_t _size) : pData(_pData), size(_size)	{}
-	~WriteCommand() { delete[] pData; }
+	WriteCommand(PacketBase* packet) : pData(packet), size(packet->size) {}
+	~WriteCommand() { delete pData; }
 
 public:
-	WriteCommand* Clone()
-	{
-		char* deepCopyData = new char[size];
-		memcpy_s(pData, size, deepCopyData, size);
-		return new WriteCommand(deepCopyData, size);
-	}
-
-public:
-	void* pData;
+	PacketBase* pData;
 	std::size_t size;
 };
 
@@ -129,7 +111,7 @@ public:
 		}
 		else
 		{
-			pCurrentCommand = pCommand->Clone();
+			pCurrentCommand = pCommand;
 			writeQueue.push(pCurrentCommand);
 		}
 
@@ -166,15 +148,13 @@ private:
 			}
 			else
 			{
-				std::cout << "error" << std::endl;
+				std::cout << "error No: " << error.value() << " error Message: " << error.message() << std::endl;
 			}
 
 			pServer->CloseSession(sessionID);
 		}
 		else
 		{
-			const std::string recvData = readBuffer.data();
-
 			std::size_t leftByte = prevLeftByte + bytes_transferred;
 			std::size_t readByte = 0;
 
@@ -184,7 +164,7 @@ private:
 				if (leftByte < PACKET_HEAD_SIZE)
 					break;
 
-				PacketBase* pHeader = reinterpret_cast<PacketBase*>(&readBuffer[readByte]);
+				PacketBase* pHeader = (PacketBase*)(&readBuffer[readByte]);
 				unsigned short packetSize = pHeader->size;
 
 				if (packetSize > leftByte)
@@ -197,7 +177,11 @@ private:
 
 			if (leftByte > 0)
 			{
-				memmove_s(&readBuffer[0], leftByte, &readBuffer[readByte], leftByte);
+				//memmove_s(&readBuffer[0], leftByte, &readBuffer[readByte], leftByte);
+
+				std::array<char, 512>	swapBuffer;
+				memcpy_s(&swapBuffer[0], 512, &readBuffer[readByte], leftByte);
+				memcpy_s(&readBuffer[0], 512, &swapBuffer[0], leftByte);
 			}
 
 			prevLeftByte = leftByte;
@@ -210,7 +194,7 @@ private:
 	boost::asio::ip::tcp::socket socketInstance;
 	std::queue<WriteCommand*>	writeQueue;
 
-	std::array<char, 128> readBuffer;
+	std::array<char, 512*10> readBuffer;
 	std::size_t prevLeftByte;
 	ServerInterface* pServer;
 };
@@ -265,16 +249,41 @@ public:
 		switch (pPacket->id)
 		{
 		case LOGIN:
-			break;
+		{
+			LoginPacket* pLogin = pPacket->Cast<LoginPacket>();
+
+			LoginPacket* send = new LoginPacket();
+
+			sessionList[sessionID]->PostSend(false, new WriteCommand(send));
+
+		}
+		break;
 
 		case CHAT:
-			break;
+		{
+			ChatPacket* pChat = pPacket->Cast<ChatPacket>();
+
+			std::cout << pChat->message << std::endl;
+
+			for (std::size_t i = 0; i < sessionList.size(); ++i)
+			{
+				if (!sessionList[i]->socket().is_open())
+					continue;
+
+				ChatPacket* send = new ChatPacket();
+				memcpy(send->message, pChat->message, 128);
+				sessionList[i]->PostSend(false, new WriteCommand(send));
+			}
+		}
+		break;
 		}
 	}
 
 private:
 	bool PostAccept()
 	{
+		std::cout << "PostAccept()" << std::endl;
+
 		if (sessionQueue.empty())
 		{
 			isAccepting = false;
@@ -321,6 +330,8 @@ void main()
 {
 	boost::asio::io_service service;
 	TCP_Server server(service);
+	server.Init(10);
+	server.Start();
 	service.run();
 
 	getchar();

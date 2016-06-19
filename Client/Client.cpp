@@ -13,6 +13,7 @@ enum PacketEnum
 	END
 };
 
+#pragma pack(push, 1)
 struct PacketBase
 {
 	unsigned short id;
@@ -20,6 +21,9 @@ struct PacketBase
 
 	PacketBase(unsigned short _id, unsigned short _size) : id(_id), size(_size) {}
 	~PacketBase() {}
+
+	template< typename T >
+	T* Cast() { return reinterpret_cast<T*>(this); }
 };
 
 struct LoginPacket : public PacketBase
@@ -29,8 +33,12 @@ struct LoginPacket : public PacketBase
 
 struct ChatPacket : public PacketBase
 {
+	char message[128];
+
 	ChatPacket() : PacketBase(CHAT, sizeof(ChatPacket)) {}
 };
+#pragma pack(pop, 1)
+
 
 class Command
 {
@@ -52,19 +60,11 @@ public:
 class WriteCommand
 {
 public:
-	WriteCommand(void* _pData, std::size_t _size) : pData(_pData), size(_size) {}
-	~WriteCommand() { delete[] pData; }
+	WriteCommand(PacketBase* packet) : pData(packet), size(packet->size) {}
+	~WriteCommand() { delete pData; }
 
 public:
-	WriteCommand* Clone()
-	{
-		char* deepCopyData = new char[size];
-		memcpy_s(pData, size, deepCopyData, size);
-		return new WriteCommand(deepCopyData, size);
-	}
-
-public:
-	void* pData;
+	PacketBase* pData;
 	std::size_t size;
 };
 
@@ -111,7 +111,7 @@ public:
 		}
 	}
 
-	void PostWrite(const bool immediately, const int size, WriteCommand* pCommand)
+	void PostWrite(const bool immediately, const std::size_t size, WriteCommand* pCommand)
 	{
 		WriteCommand* pCurrentCommand = nullptr;
 		{
@@ -123,7 +123,7 @@ public:
 			}
 			else
 			{
-				pCurrentCommand = pCommand->Clone();
+				pCurrentCommand = pCommand;
 				writeQueue.push(pCurrentCommand);
 			}
 
@@ -138,9 +138,19 @@ public:
 	}
 
 protected:
-	void PacketProcess(Command* pCmd)
+	void PacketProcess(PacketBase* pCmd)
 	{
+		switch (pCmd->id)
+		{
+		case LOGIN:
+			Activate();
+			break;
 
+		case CHAT:
+			ChatPacket* pChat = pCmd->Cast<ChatPacket>();
+			std::cout << pChat->message << std::endl;
+			break;
+		}
 	}
 
 private:
@@ -169,12 +179,78 @@ private:
 
 	void handle_write(const boost::system::error_code& error, std::size_t bytes_transferred)
 	{
+		WriteCommand* pNextCommand = nullptr;
+		{
+			boost::lock_guard<boost::recursive_mutex> lock(mtx);
 
+			WriteCommand* pCompleteCommand = writeQueue.front();
+			writeQueue.pop();
+			delete pCompleteCommand;
+
+			if (!writeQueue.empty())
+			{
+				pNextCommand = writeQueue.front();
+			}
+		}
+
+		if (pNextCommand != nullptr)
+		{
+			PostWrite(true, pNextCommand->size, pNextCommand);
+		}
 	}
 
 	void handle_read(const boost::system::error_code& error, std::size_t bytes_transferred)
 	{
+		if (error)
+		{
+			if (error == boost::asio::error::eof)
+			{
+				std::cout << "disconn" << std::endl;
+			}
+			else
+			{
+				std::cout << "error No: " << error.value() << " error Message: " << error.message() << std::endl;
+			}
 
+			Close();
+		}
+		else
+		{
+			memcpy_s(&packetBuffer[prevLeftByte], 1024 - prevLeftByte, readBuffer.data(), bytes_transferred);
+
+			std::size_t leftByte = prevLeftByte + bytes_transferred;
+			std::size_t readByte = 0;
+
+			const int PACKET_HEAD_SIZE = sizeof(PacketBase);
+			while (leftByte > 0)
+			{
+				if (leftByte < PACKET_HEAD_SIZE)
+					break;
+
+				PacketBase* pBase = reinterpret_cast<PacketBase*>(&packetBuffer[readByte]);
+				unsigned short packetSize = pBase->size;
+
+				if (packetSize > leftByte)
+					break;
+
+				PacketProcess(pBase);
+				leftByte -= packetSize;
+				readByte += packetSize;
+			}
+
+			if (leftByte)
+			{
+				//memmove_s(&readBuffer[0], leftByte, &readBuffer[leftByte], leftByte);
+
+				std::array<char, 512>	swapBuffer;
+				memcpy_s(&swapBuffer[0], 512, &readBuffer[readByte], leftByte);
+				memcpy_s(&readBuffer[0], 512, &swapBuffer[0], leftByte);
+			}
+
+			prevLeftByte = leftByte;
+
+			PostRead();
+		}
 	}
 
 private:
@@ -183,7 +259,7 @@ private:
 	std::array<char, 512> readBuffer;
 	std::size_t prevLeftByte;
 
-	std::array<char, 128> packetBuffer;
+	std::array<char, 1024> packetBuffer;
 	boost::recursive_mutex mtx;
 	std::queue<WriteCommand*> writeQueue;
 
@@ -195,56 +271,46 @@ int main()
 {
 	boost::asio::io_service service;
 	boost::asio::ip::tcp::endpoint endpoint(boost::asio::ip::address::from_string("127.0.0.1"), 33440);
-	boost::system::error_code connect_error;
-	boost::asio::ip::tcp::socket socket(service);
 	
-	socket.connect(endpoint, connect_error);
-	if (connect_error)
+	TCP_Client	client(service);
+	client.Connect(endpoint);
+
+	boost::thread thread(boost::bind(&boost::asio::io_service::run, &service));
+
+	char inputBuffer[256] = { 0, };
+
+	while (std::cin.getline(inputBuffer, 256))
 	{
-		std::cout << "cannot connect. error : " << connect_error.value() << " message : " << connect_error.message() << std::endl;
-		return 0;
-	}
-	else
-	{
-		std::cout << "connected" << std::endl;
-	}
-
-	for (int i = 0; i < 7; ++i)
-	{
-		char message[128] = { 0, };
-		sprintf_s(message, 127, "%d - send", i);
-		size_t messageLen = strnlen_s(message, 127);
-
-		boost::system::error_code ignored_error;
-		socket.write_some(boost::asio::buffer(message, messageLen), ignored_error);
-
-		std::array<char, 128> buf;
-		buf.assign(0);
-		boost::system::error_code error;
-		size_t len = socket.read_some(boost::asio::buffer(buf), error);
-
-		if (error)
+		if (strnlen_s(inputBuffer, 256) == 0)
 		{
-			if (error == boost::asio::error::eof)
-			{
-				std::cout << "disconn" << std::endl;
-			}
-			else
-			{
-				std::cout << "error" << std::endl;
-			}
 			break;
 		}
 
-		std::cout << "server:" << &buf[0] << std::endl;
+		if (!client.IsOpen())
+		{
+			std::cout << "서버와 연결되지 않았습니다" << std::endl;
+			continue;
+		}
+		
+		if (client.IsActivate() == false)
+		{
+			LoginPacket* packet = new LoginPacket();
+
+			client.PostWrite(false, packet->size, new WriteCommand(packet));
+		}
+		else
+		{
+			ChatPacket* packet = new ChatPacket();
+			strcpy_s(packet->message, inputBuffer);
+			client.PostWrite(false, packet->size, new WriteCommand(packet));
+		}
 	}
 
-	if (socket.is_open())
-	{
-		socket.close();
-	}
+	service.stop();
 
-	getchar();
+	client.Close();
+
+	thread.join();
 
     return 0;
 }
