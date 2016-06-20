@@ -4,7 +4,8 @@
 #include <thread>
 #include <iostream>
 #include <queue>
-
+#include <boost/lockfree/queue.hpp>
+#include <boost/thread.hpp>
 
 enum PacketEnum
 {
@@ -40,6 +41,16 @@ struct ChatPacket : public PacketBase
 };
 #pragma pack(pop, 1)
 
+class ServerInterface
+{
+public:
+	virtual ~ServerInterface() {}
+
+public:
+	virtual void CloseSession(const std::size_t sessionID) = 0;
+	virtual void PacketProcess(const std::size_t sessionID, PacketBase* pPacket) = 0;
+};
+
 class WriteCommand
 {
 public:
@@ -49,16 +60,6 @@ public:
 public:
 	PacketBase* pData;
 	std::size_t size;
-};
-
-class ServerInterface
-{
-public:
-	virtual ~ServerInterface() {}
-
-public:
-	virtual void CloseSession(const std::size_t sessionID) = 0;
-	virtual void PacketProcess(const std::size_t sessionID, PacketBase* pPacket) = 0;
 };
 
 class ServerSession
@@ -103,39 +104,16 @@ public:
 
 	void PostSend(const bool immediately, WriteCommand* pCommand)
 	{
-		WriteCommand* pCurrentCommand = nullptr;
-
-		if (immediately)
-		{
-			pCurrentCommand = pCommand;
-		}
-		else
-		{
-			pCurrentCommand = pCommand;
-			writeQueue.push(pCurrentCommand);
-		}
-
-		if (!immediately && writeQueue.size() > 1)
-			return;
-
-		boost::asio::async_write(socket(), boost::asio::buffer(pCurrentCommand->pData, pCurrentCommand->size),
-			boost::bind(&ServerSession::handle_write, this,
+		boost::asio::async_write(socket(), boost::asio::buffer(pCommand->pData, pCommand->size),
+			boost::bind(&ServerSession::handle_write, this, pCommand,
 				boost::asio::placeholders::error,
 				boost::asio::placeholders::bytes_transferred));
 	}
 
 private:
-	void handle_write(const boost::system::error_code& error, size_t bytes_transferred)
+	void handle_write(WriteCommand* pCmd, const boost::system::error_code& error, size_t bytes_transferred)
 	{
-		WriteCommand* pPrevCmd = writeQueue.front();
-		writeQueue.pop();
-		delete pPrevCmd;
-
-		if (!writeQueue.empty())
-		{
-			WriteCommand* pCmd = writeQueue.front();
-			PostSend(true, pCmd);
-		}
+		delete pCmd;
 	}
 
 	void handle_read(const boost::system::error_code& error, size_t bytes_transferred)
@@ -332,7 +310,11 @@ void main()
 	TCP_Server server(service);
 	server.Init(10);
 	server.Start();
-	service.run();
+
+	boost::thread thread1(boost::bind(&boost::asio::io_service::run, &service));
+	boost::thread thread2(boost::bind(&boost::asio::io_service::run, &service));
+	boost::thread thread3(boost::bind(&boost::asio::io_service::run, &service));
+	boost::thread thread4(boost::bind(&boost::asio::io_service::run, &service));
 
 	getchar();
 }

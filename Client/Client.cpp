@@ -240,8 +240,6 @@ private:
 
 			if (leftByte)
 			{
-				//memmove_s(&readBuffer[0], leftByte, &readBuffer[leftByte], leftByte);
-
 				std::array<char, 512>	swapBuffer;
 				memcpy_s(&swapBuffer[0], 512, &readBuffer[readByte], leftByte);
 				memcpy_s(&readBuffer[0], 512, &swapBuffer[0], leftByte);
@@ -278,9 +276,14 @@ int main()
 	boost::thread thread(boost::bind(&boost::asio::io_service::run, &service));
 
 	char inputBuffer[256] = { 0, };
+	std::cin >> inputBuffer;
+	LoginPacket* packet = new LoginPacket();
+	client.PostWrite(false, packet->size, new WriteCommand(packet));
 
-	while (std::cin.getline(inputBuffer, 256))
+	int i = 0;
+	while (true)
 	{
+		++i;
 		if (strnlen_s(inputBuffer, 256) == 0)
 		{
 			break;
@@ -292,18 +295,11 @@ int main()
 			continue;
 		}
 		
-		if (client.IsActivate() == false)
-		{
-			LoginPacket* packet = new LoginPacket();
-
-			client.PostWrite(false, packet->size, new WriteCommand(packet));
-		}
-		else
-		{
-			ChatPacket* packet = new ChatPacket();
-			strcpy_s(packet->message, inputBuffer);
-			client.PostWrite(false, packet->size, new WriteCommand(packet));
-		}
+		ChatPacket* packet = new ChatPacket();
+		sprintf_s(packet->message, "%s %d", inputBuffer, i);
+		client.PostWrite(false, packet->size, new WriteCommand(packet));
+		
+		Sleep(100);
 	}
 
 	service.stop();
