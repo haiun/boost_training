@@ -100,7 +100,18 @@ public:
 	void Connect(boost::asio::ip::tcp::endpoint endPoint)
 	{
 		prevLeftByte = 0;
-		socket().async_connect(endPoint, boost::bind(&TCP_Client::handle_connect, this, boost::asio::placeholders::error));
+		socket().async_connect(endPoint, [this](const boost::system::error_code& error)
+		{
+			if (!error)
+			{
+				std::cout << "handle_connect" << std::endl;
+				PostRead();
+			}
+			else
+			{
+				std::cout << "error No: " << error.value() << " error Message: " << error.message() << std::endl;
+			}
+		});
 	}
 
 	void Close()
@@ -131,9 +142,26 @@ public:
 				return;
 
 			boost::asio::async_write(socket(), boost::asio::buffer(pCurrentCommand->pData, pCurrentCommand->size),
-				boost::bind(&TCP_Client::handle_write, this,
-					boost::asio::placeholders::error,
-					boost::asio::placeholders::bytes_transferred));
+				[this](const boost::system::error_code& error, std::size_t bytes_transferred) {
+				WriteCommand* pNextCommand = nullptr;
+				{
+					boost::lock_guard<boost::recursive_mutex> lock(mtx);
+
+					WriteCommand* pCompleteCommand = writeQueue.front();
+					writeQueue.pop();
+					delete pCompleteCommand;
+
+					if (!writeQueue.empty())
+					{
+						pNextCommand = writeQueue.front();
+					}
+				}
+
+				if (pNextCommand != nullptr)
+				{
+					PostWrite(true, pNextCommand->size, pNextCommand);
+				}
+			});
 		}
 	}
 
@@ -156,99 +184,57 @@ protected:
 private:
 	void PostRead()
 	{
-		memset(&readBuffer[0], '\0', readBuffer.size());
-
 		socket().async_read_some(boost::asio::buffer(readBuffer),
-			boost::bind(&TCP_Client::handle_read, this,
-				boost::asio::placeholders::error,
-				boost::asio::placeholders::bytes_transferred));
-	}
-
-	void handle_connect(const boost::system::error_code& error)
-	{
-		if (!error)
-		{
-			std::cout << "handle_connect" << std::endl;
-			PostRead();
-		}
-		else
-		{
-			std::cout << "error No: " << error.value() << " error Message: " << error.message() << std::endl;
-		}
-	}
-
-	void handle_write(const boost::system::error_code& error, std::size_t bytes_transferred)
-	{
-		WriteCommand* pNextCommand = nullptr;
-		{
-			boost::lock_guard<boost::recursive_mutex> lock(mtx);
-
-			WriteCommand* pCompleteCommand = writeQueue.front();
-			writeQueue.pop();
-			delete pCompleteCommand;
-
-			if (!writeQueue.empty())
+			[this](const boost::system::error_code& error, const std::size_t bytes_transferred) {
+			if (error)
 			{
-				pNextCommand = writeQueue.front();
-			}
-		}
+				if (error == boost::asio::error::eof)
+				{
+					std::cout << "disconn" << std::endl;
+				}
+				else
+				{
+					std::cout << "error No: " << error.value() << " error Message: " << error.message() << std::endl;
+				}
 
-		if (pNextCommand != nullptr)
-		{
-			PostWrite(true, pNextCommand->size, pNextCommand);
-		}
-	}
-
-	void handle_read(const boost::system::error_code& error, std::size_t bytes_transferred)
-	{
-		if (error)
-		{
-			if (error == boost::asio::error::eof)
-			{
-				std::cout << "disconn" << std::endl;
+				Close();
 			}
 			else
 			{
-				std::cout << "error No: " << error.value() << " error Message: " << error.message() << std::endl;
+				memcpy_s(&packetBuffer[prevLeftByte], 1024 - prevLeftByte, readBuffer.data(), bytes_transferred);
+
+				std::size_t leftByte = prevLeftByte + bytes_transferred;
+				std::size_t readByte = 0;
+
+				const int PACKET_HEAD_SIZE = sizeof(PacketBase);
+				while (leftByte > 0)
+				{
+					if (leftByte < PACKET_HEAD_SIZE)
+						break;
+
+					PacketBase* pBase = reinterpret_cast<PacketBase*>(&packetBuffer[readByte]);
+					unsigned short packetSize = pBase->size;
+
+					if (packetSize > leftByte)
+						break;
+
+					PacketProcess(pBase);
+					leftByte -= packetSize;
+					readByte += packetSize;
+				}
+
+				if (leftByte)
+				{
+					std::array<char, 512>	swapBuffer;
+					memcpy_s(&swapBuffer[0], 512, &readBuffer[readByte], leftByte);
+					memcpy_s(&readBuffer[0], 512, &swapBuffer[0], leftByte);
+				}
+
+				prevLeftByte = leftByte;
+
+				PostRead();
 			}
-
-			Close();
-		}
-		else
-		{
-			memcpy_s(&packetBuffer[prevLeftByte], 1024 - prevLeftByte, readBuffer.data(), bytes_transferred);
-
-			std::size_t leftByte = prevLeftByte + bytes_transferred;
-			std::size_t readByte = 0;
-
-			const int PACKET_HEAD_SIZE = sizeof(PacketBase);
-			while (leftByte > 0)
-			{
-				if (leftByte < PACKET_HEAD_SIZE)
-					break;
-
-				PacketBase* pBase = reinterpret_cast<PacketBase*>(&packetBuffer[readByte]);
-				unsigned short packetSize = pBase->size;
-
-				if (packetSize > leftByte)
-					break;
-
-				PacketProcess(pBase);
-				leftByte -= packetSize;
-				readByte += packetSize;
-			}
-
-			if (leftByte)
-			{
-				std::array<char, 512>	swapBuffer;
-				memcpy_s(&swapBuffer[0], 512, &readBuffer[readByte], leftByte);
-				memcpy_s(&readBuffer[0], 512, &swapBuffer[0], leftByte);
-			}
-
-			prevLeftByte = leftByte;
-
-			PostRead();
-		}
+		});
 	}
 
 private:

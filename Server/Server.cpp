@@ -4,7 +4,6 @@
 #include <thread>
 #include <iostream>
 #include <queue>
-#include <boost/lockfree/queue.hpp>
 #include <boost/thread.hpp>
 
 enum PacketEnum
@@ -75,12 +74,6 @@ public:
 
 	~ServerSession()
 	{
-		while (!writeQueue.empty())
-		{
-			WriteCommand* pWriteCommand = writeQueue.front();
-			writeQueue.pop();
-			delete pWriteCommand;
-		}
 	}
 
 	void Init()
@@ -95,82 +88,70 @@ public:
 
 	void PostRead()
 	{
-		socket().async_read_some
-		(
-			boost::asio::buffer(readBuffer),
-			boost::bind(&ServerSession::handle_read, this, boost::asio::placeholders::error, boost::asio::placeholders::bytes_transferred)
-		);
-	}
-
-	void PostSend(const bool immediately, WriteCommand* pCommand)
-	{
-		boost::asio::async_write(socket(), boost::asio::buffer(pCommand->pData, pCommand->size),
-			boost::bind(&ServerSession::handle_write, this, pCommand,
-				boost::asio::placeholders::error,
-				boost::asio::placeholders::bytes_transferred));
-	}
-
-private:
-	void handle_write(WriteCommand* pCmd, const boost::system::error_code& error, size_t bytes_transferred)
-	{
-		delete pCmd;
-	}
-
-	void handle_read(const boost::system::error_code& error, size_t bytes_transferred)
-	{
-		if (error)
-		{
-			if (error == boost::asio::error::eof)
+		socket().async_read_some(boost::asio::buffer(readBuffer),
+			[this](boost::system::error_code error, std::size_t bytes_transferred) {
+			if (error)
 			{
-				std::cout << "disconn" << std::endl;
+				if (error == boost::asio::error::eof)
+				{
+					std::cout << "disconn" << std::endl;
+				}
+				else
+				{
+					std::cout << "error No: " << error.value() << " error Message: " << error.message() << std::endl;
+				}
+
+				pServer->CloseSession(sessionID);
 			}
 			else
 			{
-				std::cout << "error No: " << error.value() << " error Message: " << error.message() << std::endl;
+				std::size_t leftByte = prevLeftByte + bytes_transferred;
+				std::size_t readByte = 0;
+
+				const int PACKET_HEAD_SIZE = sizeof(PacketBase);
+				while (leftByte > 0)
+				{
+					if (leftByte < PACKET_HEAD_SIZE)
+						break;
+
+					PacketBase* pHeader = (PacketBase*)(&readBuffer[readByte]);
+					unsigned short packetSize = pHeader->size;
+
+					if (packetSize > leftByte)
+						break;
+
+					pServer->PacketProcess(sessionID, pHeader);
+					leftByte -= packetSize;
+					readByte += packetSize;
+				}
+
+				if (leftByte > 0)
+				{
+					//memmove_s(&readBuffer[0], leftByte, &readBuffer[readByte], leftByte);
+
+					std::array<char, 512>	swapBuffer;
+					memcpy_s(&swapBuffer[0], 512, &readBuffer[readByte], leftByte);
+					memcpy_s(&readBuffer[0], 512, &swapBuffer[0], leftByte);
+				}
+
+				prevLeftByte = leftByte;
+
+				PostRead();
 			}
-
-			pServer->CloseSession(sessionID);
-		}
-		else
-		{
-			std::size_t leftByte = prevLeftByte + bytes_transferred;
-			std::size_t readByte = 0;
-
-			const int PACKET_HEAD_SIZE = sizeof(PacketBase);
-			while (leftByte > 0)
-			{
-				if (leftByte < PACKET_HEAD_SIZE)
-					break;
-
-				PacketBase* pHeader = (PacketBase*)(&readBuffer[readByte]);
-				unsigned short packetSize = pHeader->size;
-
-				if (packetSize > leftByte)
-					break;
-
-				pServer->PacketProcess(sessionID, pHeader);
-				leftByte -= packetSize;
-				readByte += packetSize;
-			}
-
-			if (leftByte > 0)
-			{
-				//memmove_s(&readBuffer[0], leftByte, &readBuffer[readByte], leftByte);
-
-				std::array<char, 512>	swapBuffer;
-				memcpy_s(&swapBuffer[0], 512, &readBuffer[readByte], leftByte);
-				memcpy_s(&readBuffer[0], 512, &swapBuffer[0], leftByte);
-			}
-
-			prevLeftByte = leftByte;
-
-			PostRead();
-		}
+		});
 	}
 
+	void PostSend(WriteCommand* pCommand)
+	{
+		boost::asio::async_write(socket(), boost::asio::buffer(pCommand->pData, pCommand->size),
+			[this, pCommand](const boost::system::error_code& error, std::size_t bytes_transferred) {
+			delete pCommand;
+		});
+	}
+
+private:
 	std::size_t sessionID;
 	boost::asio::ip::tcp::socket socketInstance;
-	std::queue<WriteCommand*>	writeQueue;
 
 	std::array<char, 512*10> readBuffer;
 	std::size_t prevLeftByte;
@@ -182,7 +163,6 @@ class TCP_Server : public ServerInterface
 public:
 	TCP_Server(boost::asio::io_service& io_service)
 		: acceptor(io_service, boost::asio::ip::tcp::endpoint(boost::asio::ip::tcp::v4(), 33440))
-		, pSession(nullptr)
 		, isAccepting(false)
 	{
 		
@@ -232,7 +212,7 @@ public:
 
 			LoginPacket* send = new LoginPacket();
 
-			sessionList[sessionID]->PostSend(false, new WriteCommand(send));
+			sessionList[sessionID]->PostSend(new WriteCommand(send));
 
 		}
 		break;
@@ -250,7 +230,7 @@ public:
 
 				ChatPacket* send = new ChatPacket();
 				memcpy(send->message, pChat->message, 128);
-				sessionList[i]->PostSend(false, new WriteCommand(send));
+				sessionList[i]->PostSend(new WriteCommand(send));
 			}
 		}
 		break;
@@ -272,33 +252,29 @@ private:
 		std::size_t sessionID = sessionQueue.front();
 		sessionQueue.pop_front();
 
-		ServerSession* targetSession = sessionList[sessionID];
-		acceptor.async_accept(targetSession->socket(),
-			boost::bind(&TCP_Server::handle_accept, this, targetSession, boost::asio::placeholders::error));
+		ServerSession* pSession = sessionList[sessionID];
+		acceptor.async_accept(pSession->socket(),
+			[this, pSession](const boost::system::error_code& error) {
+			if (!error)
+			{
+				std::cout << "handle_accept" << std::endl;
+
+				pSession->Init();
+				pSession->PostRead();
+
+				PostAccept();
+			}
+			else
+			{
+				std::cout << "error No: " << error.value() << " error Message: " << error.message() << std::endl;
+			}
+		});
 
 		return true;
 	}
 
-	void handle_accept(ServerSession* pSession, const boost::system::error_code& error)
-	{
-		if (!error)
-		{
-			std::cout << "handle_accept" << std::endl;
-
-			pSession->Init();
-			pSession->PostRead();
-
-			PostAccept();
-		}
-		else
-		{
-			std::cout << "error No: " << error.value() << " error Message: " << error.message() << std::endl;
-		}
-	}
-
 private:
 	boost::asio::ip::tcp::acceptor acceptor;
-	ServerSession* pSession;
 	bool isAccepting;
 	std::vector<ServerSession*>	sessionList;
 	std::deque<std::size_t> sessionQueue;
