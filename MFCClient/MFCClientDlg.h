@@ -3,14 +3,25 @@
 //
 
 #pragma once
-
+#include "../Packet/TCP_Client.h"
 
 // CMFCClientDlg 대화 상자
 class CMFCClientDlg : public CDialogEx
 {
+private:
+	boost::asio::io_service m_service;
+	TCP_Client* m_pClient;
+	boost::thread* m_pServiceThread;
+
+	void PacketProc(PacketBase* pBase)
+	{
+		int a = 0;
+	}
+
 // 생성입니다.
 public:
 	CMFCClientDlg(CWnd* pParent = NULL);	// 표준 생성자입니다.
+	~CMFCClientDlg();
 
 // 대화 상자 데이터입니다.
 #ifdef AFX_DESIGN_TIME
@@ -31,4 +42,6 @@ protected:
 	afx_msg void OnPaint();
 	afx_msg HCURSOR OnQueryDragIcon();
 	DECLARE_MESSAGE_MAP()
+public:
+	afx_msg void OnBnClickedLoginButton();
 };

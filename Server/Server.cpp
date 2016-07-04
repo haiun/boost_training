@@ -169,6 +169,7 @@ public:
 			LoginPacket* pLogin = pPacket->Cast<LoginPacket>();
 
 			LoginPacket* send = new LoginPacket();
+			send->sessionID = sessionID;
 
 			sessionList[sessionID]->PostSend(new WriteCommand(send));
 

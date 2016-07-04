@@ -51,10 +51,31 @@ END_MESSAGE_MAP()
 
 CMFCClientDlg::CMFCClientDlg(CWnd* pParent /*=NULL*/)
 	: CDialogEx(IDD_MFCCLIENT_DIALOG, pParent)
+	, m_pClient(nullptr)
+	, m_pServiceThread(nullptr)
 {
 	m_hIcon = AfxGetApp()->LoadIcon(IDR_MAINFRAME);
 
 
+}
+
+CMFCClientDlg::~CMFCClientDlg()
+{
+	m_service.stop();
+
+	if (m_pClient != nullptr)
+	{
+		m_pClient->Close();
+		delete m_pClient;
+		m_pClient = nullptr;
+	}
+
+	if (m_pServiceThread != nullptr)
+	{
+		m_pServiceThread->join();
+		delete m_pServiceThread;
+		m_pServiceThread = nullptr;
+	}
 }
 
 void CMFCClientDlg::DoDataExchange(CDataExchange* pDX)
@@ -66,6 +87,7 @@ BEGIN_MESSAGE_MAP(CMFCClientDlg, CDialogEx)
 	ON_WM_SYSCOMMAND()
 	ON_WM_PAINT()
 	ON_WM_QUERYDRAGICON()
+	ON_BN_CLICKED(IDC_LOGIN_BUTTON, &CMFCClientDlg::OnBnClickedLoginButton)
 END_MESSAGE_MAP()
 
 
@@ -101,6 +123,14 @@ BOOL CMFCClientDlg::OnInitDialog()
 	SetIcon(m_hIcon, FALSE);		// 작은 아이콘을 설정합니다.
 
 	// TODO: 여기에 추가 초기화 작업을 추가합니다.
+	boost::asio::ip::tcp::endpoint endpoint(boost::asio::ip::address::from_string("127.0.0.1"), 33440);
+
+	m_pClient = new TCP_Client(m_service);
+	m_pClient->BindPacketProc([this](PacketBase* pPacket) { PacketProc(pPacket); });
+
+	m_pClient->Connect(endpoint);
+
+	m_pServiceThread = new boost::thread(boost::bind(&boost::asio::io_service::run, &m_service));
 
 	return TRUE;  // 포커스를 컨트롤에 설정하지 않으면 TRUE를 반환합니다.
 }
@@ -154,3 +184,13 @@ HCURSOR CMFCClientDlg::OnQueryDragIcon()
 	return static_cast<HCURSOR>(m_hIcon);
 }
 
+void CMFCClientDlg::OnBnClickedLoginButton()
+{
+	// TODO: Add your control notification handler code here
+	CString str;
+	GetDlgItem(IDC_LOGIN_ID)->GetWindowText(str);
+	char* szID = CT2A(str.GetBuffer());
+
+	LoginPacket* packet = new LoginPacket();
+	m_pClient->PostWrite(false, packet->size, new WriteCommand(packet));
+}

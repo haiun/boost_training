@@ -24,7 +24,9 @@ struct PacketBase
 
 struct LoginPacket : public PacketBase
 {
-	LoginPacket() : PacketBase(LOGIN, sizeof(LoginPacket)) {}
+	std::size_t sessionID;
+
+	LoginPacket() : PacketBase(LOGIN, sizeof(LoginPacket)), sessionID(0) {}
 };
 
 struct ChatPacket : public PacketBase
@@ -70,7 +72,7 @@ public:
 	void Release()
 	{
 		uint32_t subValue = ref.fetch_sub(1);
-		if (subValue == 0)
+		if (subValue == 1)
 		{
 			delete this;
 		}
