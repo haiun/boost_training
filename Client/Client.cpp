@@ -5,68 +5,7 @@
 #include <iostream>
 #include <queue>
 
-enum PacketEnum
-{
-	NONE,
-	LOGIN,
-	CHAT,
-	END
-};
-
-#pragma pack(push, 1)
-struct PacketBase
-{
-	unsigned short id;
-	unsigned short size;
-
-	PacketBase(unsigned short _id, unsigned short _size) : id(_id), size(_size) {}
-	~PacketBase() {}
-
-	template< typename T >
-	T* Cast() { return reinterpret_cast<T*>(this); }
-};
-
-struct LoginPacket : public PacketBase
-{
-	LoginPacket() : PacketBase(LOGIN, sizeof(LoginPacket)) {}
-};
-
-struct ChatPacket : public PacketBase
-{
-	char message[128];
-
-	ChatPacket() : PacketBase(CHAT, sizeof(ChatPacket)) {}
-};
-#pragma pack(pop, 1)
-
-
-class Command
-{
-public:
-	Command(void* _pData, std::size_t _size) : pData(_pData), size(_size) {}
-	~Command() {}
-
-public:
-	Command* Clone()
-	{
-		return new Command(pData, size);
-	}
-
-public:
-	void* pData;
-	std::size_t size;
-};
-
-class WriteCommand
-{
-public:
-	WriteCommand(PacketBase* packet) : pData(packet), size(packet->size) {}
-	~WriteCommand() { delete pData; }
-
-public:
-	PacketBase* pData;
-	std::size_t size;
-};
+#include "../Packet/Packet.h"
 
 class TCP_Client
 {
@@ -87,7 +26,7 @@ public:
 		{
 			WriteCommand* pWriteCommand = writeQueue.front();
 			writeQueue.pop();
-			delete pWriteCommand;
+			pWriteCommand->Release();
 		}
 	}
 
@@ -141,7 +80,7 @@ public:
 			if (!immediately && writeQueue.size() > 1)
 				return;
 
-			boost::asio::async_write(socket(), boost::asio::buffer(pCurrentCommand->pData, pCurrentCommand->size),
+			boost::asio::async_write(socket(), boost::asio::buffer(pCurrentCommand->pData, pCurrentCommand->size()),
 				[this](const boost::system::error_code& error, std::size_t bytes_transferred) {
 				WriteCommand* pNextCommand = nullptr;
 				{
@@ -149,7 +88,7 @@ public:
 
 					WriteCommand* pCompleteCommand = writeQueue.front();
 					writeQueue.pop();
-					delete pCompleteCommand;
+					pCompleteCommand->Release();
 
 					if (!writeQueue.empty())
 					{
@@ -159,7 +98,7 @@ public:
 
 				if (pNextCommand != nullptr)
 				{
-					PostWrite(true, pNextCommand->size, pNextCommand);
+					PostWrite(true, pNextCommand->size(), pNextCommand);
 				}
 			});
 		}
@@ -225,9 +164,9 @@ private:
 
 				if (leftByte)
 				{
-					std::array<char, 512>	swapBuffer;
-					memcpy_s(&swapBuffer[0], 512, &readBuffer[readByte], leftByte);
-					memcpy_s(&readBuffer[0], 512, &swapBuffer[0], leftByte);
+					std::array<char, 1024>	swapBuffer;
+					memcpy_s(&swapBuffer[0], 1024, &readBuffer[readByte], leftByte);
+					memcpy_s(&readBuffer[0], 1024, &swapBuffer[0], leftByte);
 				}
 
 				prevLeftByte = leftByte;
@@ -240,7 +179,7 @@ private:
 private:
 	boost::asio::io_service& service;
 	boost::asio::ip::tcp::socket socketInstance;
-	std::array<char, 512> readBuffer;
+	std::array<char, 1024> readBuffer;
 	std::size_t prevLeftByte;
 
 	std::array<char, 1024> packetBuffer;
@@ -284,7 +223,7 @@ int main()
 		ChatPacket* packet = new ChatPacket();
 		sprintf_s(packet->message, "%s %d", inputBuffer, i);
 		client.PostWrite(false, packet->size, new WriteCommand(packet));
-		
+
 		Sleep(100);
 	}
 

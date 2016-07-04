@@ -1,44 +1,13 @@
 #include "stdafx.h"
+
 #include <boost/asio.hpp>
 #include <boost/bind.hpp>
-#include <thread>
+#include <boost/thread.hpp>
 #include <iostream>
 #include <queue>
-#include <boost/thread.hpp>
 
-enum PacketEnum
-{
-	NONE,
-	LOGIN,
-	CHAT,
-	END
-};
+#include "../Packet/Packet.h"
 
-#pragma pack(push, 1)
-struct PacketBase
-{
-	unsigned short id;
-	unsigned short size;
-
-	PacketBase(unsigned short _id, unsigned short _size) : id(_id), size(_size) {}
-	~PacketBase() {}
-
-	template< typename T >
-	T* Cast() { return reinterpret_cast<T*>(this); }
-};
-
-struct LoginPacket : public PacketBase
-{
-	LoginPacket() : PacketBase(LOGIN, sizeof(LoginPacket)) {}
-};
-
-struct ChatPacket : public PacketBase
-{
-	char message[128];
-
-	ChatPacket() : PacketBase(CHAT, sizeof(ChatPacket)) {}
-};
-#pragma pack(pop, 1)
 
 class ServerInterface
 {
@@ -48,17 +17,6 @@ public:
 public:
 	virtual void CloseSession(const std::size_t sessionID) = 0;
 	virtual void PacketProcess(const std::size_t sessionID, PacketBase* pPacket) = 0;
-};
-
-class WriteCommand
-{
-public:
-	WriteCommand(PacketBase* packet) : pData(packet), size(packet->size) {}
-	~WriteCommand() { delete pData; }
-
-public:
-	PacketBase* pData;
-	std::size_t size;
 };
 
 class ServerSession
@@ -129,9 +87,9 @@ public:
 				{
 					//memmove_s(&readBuffer[0], leftByte, &readBuffer[readByte], leftByte);
 
-					std::array<char, 512>	swapBuffer;
-					memcpy_s(&swapBuffer[0], 512, &readBuffer[readByte], leftByte);
-					memcpy_s(&readBuffer[0], 512, &swapBuffer[0], leftByte);
+					std::array<char, 1024>	swapBuffer;
+					memcpy_s(&swapBuffer[0], 1024, &readBuffer[readByte], leftByte);
+					memcpy_s(&readBuffer[0], 1024, &swapBuffer[0], leftByte);
 				}
 
 				prevLeftByte = leftByte;
@@ -143,9 +101,9 @@ public:
 
 	void PostSend(WriteCommand* pCommand)
 	{
-		boost::asio::async_write(socket(), boost::asio::buffer(pCommand->pData, pCommand->size),
+		boost::asio::async_write(socket(), boost::asio::buffer(pCommand->pData, pCommand->size()),
 			[this, pCommand](const boost::system::error_code& error, std::size_t bytes_transferred) {
-			delete pCommand;
+			pCommand->Release();
 		});
 	}
 
@@ -153,7 +111,7 @@ private:
 	std::size_t sessionID;
 	boost::asio::ip::tcp::socket socketInstance;
 
-	std::array<char, 512*10> readBuffer;
+	std::array<char, 1024> readBuffer;
 	std::size_t prevLeftByte;
 	ServerInterface* pServer;
 };
@@ -223,15 +181,17 @@ public:
 
 			std::cout << pChat->message << std::endl;
 
+			ChatPacket* send = new ChatPacket();
+			memcpy(send->message, pChat->message, 128);
+			WriteCommand* pCmd = new WriteCommand(send);
 			for (std::size_t i = 0; i < sessionList.size(); ++i)
 			{
 				if (!sessionList[i]->socket().is_open())
 					continue;
 
-				ChatPacket* send = new ChatPacket();
-				memcpy(send->message, pChat->message, 128);
-				sessionList[i]->PostSend(new WriteCommand(send));
+				sessionList[i]->PostSend(pCmd->Clone());
 			}
+			pCmd->Release();
 		}
 		break;
 		}
