@@ -106,7 +106,7 @@ public:
 	}
 
 	template<typename PacketProcCallback>
-	void BindPacketProc(PacketProcCallback callback)
+	void BindPacketProc(PacketProcCallback&& callback)
 	{
 		bindedPacketProc = callback;
 	}
@@ -117,13 +117,24 @@ protected:
 		switch (pCmd->id)
 		{
 		case LOGIN:
+		{
 			Activate();
 			break;
+		}
 
 		case CHAT:
+		{
 			ChatPacket* pChat = pCmd->Cast<ChatPacket>();
 			std::cout << pChat->message << std::endl;
 			break;
+		}
+
+		case MOVE:
+		{
+			MovePacket* pMove = pCmd->Cast<MovePacket>();
+			printf("%zd: P(%d,%d) V(%d,%d) T(%ld)\n", pMove->sessionID, pMove->position[0], pMove->position[1], pMove->velocity[0], pMove->velocity[1], pMove->time);
+			break;
+		}
 		}
 	}
 

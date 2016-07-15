@@ -16,6 +16,12 @@ int main()
 	LoginPacket* packet = new LoginPacket();
 	client.PostWrite(false, packet->size, new WriteCommand(packet));
 
+	while (std::cin >> inputBuffer)
+	{
+
+	}
+
+	/*
 	int i = 0;
 	while (true)
 	{
@@ -37,6 +43,7 @@ int main()
 
 		Sleep(100);
 	}
+	*/
 
 	service.stop();
 

@@ -160,41 +160,73 @@ public:
 		sessionQueue.push_back(sessionID);
 	}
 
+	void Broadcast(WriteCommand* pCmd)
+	{
+		std::for_each(sessionList.begin(), sessionList.end(), [pCmd](ServerSession* pSession) {
+			if (!pSession->socket().is_open())
+				return;
+
+			pSession->PostSend(pCmd->Clone());
+		});
+	}
+
 	void PacketProcess(const std::size_t sessionID, PacketBase* pPacket)
 	{
 		switch (pPacket->id)
 		{
 		case LOGIN:
 		{
-			LoginPacket* pLogin = pPacket->Cast<LoginPacket>();
+			{
+				LoginPacket* pLogin = pPacket->Cast<LoginPacket>();
 
-			LoginPacket* send = new LoginPacket();
-			send->sessionID = sessionID;
+				LoginPacket* send = new LoginPacket();
+				send->sessionID = sessionID;
 
-			sessionList[sessionID]->PostSend(new WriteCommand(send));
+				sessionList[sessionID]->PostSend(new WriteCommand(send));
+			}
 
+			{
+				MovePacket* pMove = new MovePacket();
+				pMove->sessionID = sessionID;
+				pMove->position[0] = 0;
+				pMove->position[1] = 0;
+				pMove->velocity[0] = 0;
+				pMove->velocity[1] = 0;
+
+				WriteCommand* pCmd = new WriteCommand(pMove);
+				Broadcast(pCmd);
+				pCmd->Release();
+			}
+			break;
 		}
-		break;
 
 		case CHAT:
 		{
 			ChatPacket* pChat = pPacket->Cast<ChatPacket>();
 
-			std::cout << pChat->message << std::endl;
-
 			ChatPacket* send = new ChatPacket();
 			memcpy(send->message, pChat->message, 128);
 			WriteCommand* pCmd = new WriteCommand(send);
-			for (std::size_t i = 0; i < sessionList.size(); ++i)
-			{
-				if (!sessionList[i]->socket().is_open())
-					continue;
-
-				sessionList[i]->PostSend(pCmd->Clone());
-			}
+			Broadcast(pCmd);
 			pCmd->Release();
+			break;
 		}
-		break;
+
+		case MOVE:
+		{
+			MovePacket* pMove = pPacket->Cast<MovePacket>();
+
+			MovePacket* send = new MovePacket();
+			send->sessionID = pMove->sessionID;
+			send->position[0] = pMove->position[0];
+			send->position[1] = pMove->position[1];
+			send->velocity[0] = pMove->velocity[0];
+			send->velocity[1] = pMove->velocity[1];
+			WriteCommand* pCmd = new WriteCommand(send);
+			Broadcast(pCmd);
+			pCmd->Release();
+			break;
+		}
 		}
 	}
 

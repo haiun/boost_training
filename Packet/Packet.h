@@ -6,6 +6,7 @@ enum PacketEnum
 	NONE,
 	LOGIN,
 	CHAT,
+	MOVE,
 	END
 };
 
@@ -44,6 +45,15 @@ struct TimeStampPacket : public PacketBase
 	{
 		time = GetTickCount();
 	}
+};
+
+struct MovePacket : public TimeStampPacket
+{
+	std::size_t sessionID;
+	int position[2];
+	int velocity[2];
+
+	MovePacket() : TimeStampPacket(MOVE, sizeof(MovePacket)) {}
 };
 
 #pragma pack(pop, 1)
