@@ -192,5 +192,5 @@ void CMFCClientDlg::OnBnClickedLoginButton()
 	char* szID = CT2A(str.GetBuffer());
 
 	LoginPacket* packet = new LoginPacket();
-	m_pClient->PostWrite(false, packet->size, new WriteCommand(packet));
+	m_pClient->PostWrite(false, packet->size, WriteCommand::Create(packet));
 }

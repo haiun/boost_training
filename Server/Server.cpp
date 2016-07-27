@@ -182,7 +182,7 @@ public:
 				LoginPacket* send = new LoginPacket();
 				send->sessionID = sessionID;
 
-				sessionList[sessionID]->PostSend(new WriteCommand(send));
+				sessionList[sessionID]->PostSend(WriteCommand::Create(send));
 			}
 
 			{
@@ -193,7 +193,7 @@ public:
 				pMove->velocity[0] = 0;
 				pMove->velocity[1] = 0;
 
-				WriteCommand* pCmd = new WriteCommand(pMove);
+				WriteCommand* pCmd = WriteCommand::Create(pMove);
 				Broadcast(pCmd);
 				pCmd->Release();
 			}
@@ -206,7 +206,7 @@ public:
 
 			ChatPacket* send = new ChatPacket();
 			memcpy(send->message, pChat->message, 128);
-			WriteCommand* pCmd = new WriteCommand(send);
+			WriteCommand* pCmd = WriteCommand::Create(send);
 			Broadcast(pCmd);
 			pCmd->Release();
 			break;
@@ -222,7 +222,7 @@ public:
 			send->position[1] = pMove->position[1];
 			send->velocity[0] = pMove->velocity[0];
 			send->velocity[1] = pMove->velocity[1];
-			WriteCommand* pCmd = new WriteCommand(send);
+			WriteCommand* pCmd = WriteCommand::Create(send);
 			Broadcast(pCmd);
 			pCmd->Release();
 			break;

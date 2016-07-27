@@ -1,5 +1,6 @@
 #pragma once
 #include <boost/atomic/atomic.hpp>
+#include <boost/pool/object_pool.hpp>
 
 enum PacketEnum
 {
@@ -60,18 +61,21 @@ struct MovePacket : public TimeStampPacket
 
 class WriteCommand
 {
-public:
+private:
 	WriteCommand(PacketBase* packet) : pData(packet), ref(1) {}
-
-protected:
 	~WriteCommand() { delete pData; }
 	void AddRef()
 	{
-		ref.fetch_add(1);
+		ref.fetch_add(1, boost::memory_order_relaxed);
 	}
 
 public:
 	unsigned short size() { return pData->size; }
+
+	static WriteCommand* Create(PacketBase* packet)
+	{
+		return new WriteCommand(packet);
+	}
 
 	WriteCommand* Clone()
 	{
@@ -81,13 +85,38 @@ public:
 
 	void Release()
 	{
-		uint32_t subValue = ref.fetch_sub(1);
-		if (subValue == 1)
+		if (ref.fetch_sub(1) == 1)
 		{
+			boost::atomic_thread_fence(boost::memory_order_acquire);
 			delete this;
 		}
 	}
 
 	PacketBase* pData;
 	boost::atomics::atomic_uint32_t ref;
+};
+
+class SpinLock
+{
+private:
+	typedef enum { LOCKED, UNLOCKED } LockState;
+	boost::atomic<LockState> state;
+
+public:
+	SpinLock() : state(UNLOCKED) {}
+
+	void lock()
+	{
+		while (state.exchange(LOCKED, boost::memory_order_acquire) == LOCKED);
+	}
+
+	void unlock()
+	{
+		state.store(UNLOCKED, boost::memory_order_release);
+	}
+};
+
+class WriteCommandPool
+{
+
 };

@@ -14,7 +14,7 @@ int main()
 	char inputBuffer[256] = { 0, };
 	std::cin >> inputBuffer;
 	LoginPacket* packet = new LoginPacket();
-	client.PostWrite(false, packet->size, new WriteCommand(packet));
+	client.PostWrite(false, packet->size, WriteCommand::Create(packet));
 
 	while (std::cin >> inputBuffer)
 	{
