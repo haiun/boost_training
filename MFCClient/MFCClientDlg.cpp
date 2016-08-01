@@ -52,7 +52,6 @@ END_MESSAGE_MAP()
 CMFCClientDlg::CMFCClientDlg(CWnd* pParent /*=NULL*/)
 	: CDialogEx(IDD_MFCCLIENT_DIALOG, pParent)
 	, m_pClient(nullptr)
-	, m_pServiceThread(nullptr)
 {
 	m_hIcon = AfxGetApp()->LoadIcon(IDR_MAINFRAME);
 
@@ -61,21 +60,6 @@ CMFCClientDlg::CMFCClientDlg(CWnd* pParent /*=NULL*/)
 
 CMFCClientDlg::~CMFCClientDlg()
 {
-	m_service.stop();
-
-	if (m_pClient != nullptr)
-	{
-		m_pClient->Close();
-		delete m_pClient;
-		m_pClient = nullptr;
-	}
-
-	if (m_pServiceThread != nullptr)
-	{
-		m_pServiceThread->join();
-		delete m_pServiceThread;
-		m_pServiceThread = nullptr;
-	}
 }
 
 void CMFCClientDlg::DoDataExchange(CDataExchange* pDX)
@@ -88,6 +72,7 @@ BEGIN_MESSAGE_MAP(CMFCClientDlg, CDialogEx)
 	ON_WM_PAINT()
 	ON_WM_QUERYDRAGICON()
 	ON_BN_CLICKED(IDC_LOGIN_BUTTON, &CMFCClientDlg::OnBnClickedLoginButton)
+	ON_WM_CLOSE()
 END_MESSAGE_MAP()
 
 
@@ -130,7 +115,7 @@ BOOL CMFCClientDlg::OnInitDialog()
 
 	m_pClient->Connect(endpoint);
 
-	m_pServiceThread = new boost::thread(boost::bind(&boost::asio::io_service::run, &m_service));
+	m_pServiceThread.push_back(new boost::thread(boost::bind(&boost::asio::io_service::run, &m_service)));
 
 	return TRUE;  // 포커스를 컨트롤에 설정하지 않으면 TRUE를 반환합니다.
 }
@@ -192,5 +177,28 @@ void CMFCClientDlg::OnBnClickedLoginButton()
 	char* szID = CT2A(str.GetBuffer());
 
 	LoginPacket* packet = new LoginPacket();
-	m_pClient->PostWrite(false, packet->size, WriteCommand::Create(packet));
+	m_pClient->PostWrite(false, WriteCommand::Create(packet));
+}
+
+
+void CMFCClientDlg::OnClose()
+{
+	m_service.stop();
+
+	if (m_pClient != nullptr)
+	{
+		m_pClient->Close();
+		delete m_pClient;
+		m_pClient = nullptr;
+	}
+
+	for (std::size_t i = 0; i < m_pServiceThread.size(); ++i)
+	{
+		m_pServiceThread[i]->join();
+		delete m_pServiceThread[i];
+		m_pServiceThread[i] = nullptr;
+	}
+	m_pServiceThread.clear();
+
+	CDialogEx::OnClose();
 }

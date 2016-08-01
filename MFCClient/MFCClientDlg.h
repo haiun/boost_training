@@ -4,19 +4,48 @@
 
 #pragma once
 #include "../Packet/TCP_Client.h"
+#include <map>
 
 // CMFCClientDlg 대화 상자
 class CMFCClientDlg : public CDialogEx
 {
-private:
+public:
 	boost::asio::io_service m_service;
 	TCP_Client* m_pClient;
-	boost::thread* m_pServiceThread;
+	std::vector< boost::thread* > m_pServiceThread;
 
 	void PacketProc(PacketBase* pBase)
 	{
-		int a = 0;
+		switch (pBase->id)
+		{
+		case MOVE:
+			MovePacket* pMove = pBase->Cast<MovePacket>();
+
+			CStatic* pTargetStatic = nullptr;
+			std::map<std::size_t, CStatic*>::iterator find = unitMap.find(pMove->sessionID);
+			if (find == unitMap.end())
+			{
+				pTargetStatic = new CStatic();
+
+				TCHAR buffer[20] = { 0, };
+				_itot_s((int)pMove->sessionID, buffer, 10);
+				pTargetStatic->Create(buffer, WS_CHILD | WS_VISIBLE | SS_LEFT, CRect(pMove->position[0], pMove->position[1], pMove->position[0]+30, pMove->position[1]+30), this);
+
+				unitMap.insert(std::make_pair(pMove->sessionID, pTargetStatic));
+			}
+			else
+			{
+				pTargetStatic = find->second;
+				pTargetStatic->MoveWindow(CRect(pMove->position[0], pMove->position[1], pMove->position[0] + 30, pMove->position[1] + 30));
+			}
+			pTargetStatic->UpdateData(FALSE);
+			pTargetStatic->Invalidate();
+
+			break;
+		}
 	}
+
+	std::map<std::size_t, CStatic*> unitMap;
 
 // 생성입니다.
 public:
@@ -44,4 +73,5 @@ protected:
 	DECLARE_MESSAGE_MAP()
 public:
 	afx_msg void OnBnClickedLoginButton();
+	afx_msg void OnClose();
 };

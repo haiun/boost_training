@@ -62,7 +62,7 @@ public:
 		}
 	}
 
-	void PostWrite(const bool immediately, const std::size_t size, WriteCommand* pCommand)
+	void PostWrite(const bool immediately, WriteCommand* pCommand)
 	{
 		WriteCommand* pCurrentCommand = nullptr;
 		{
@@ -99,7 +99,7 @@ public:
 
 				if (pNextCommand != nullptr)
 				{
-					PostWrite(true, pNextCommand->size(), pNextCommand);
+					PostWrite(true, pNextCommand);
 				}
 			});
 		}
