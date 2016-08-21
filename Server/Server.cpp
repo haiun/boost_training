@@ -9,6 +9,20 @@
 #include "../Packet/Packet.h"
 
 
+class Room
+{
+public:
+	boost::asio::strand strand;
+	std::vector<std::string> log;
+
+public:
+	void Call(WriteCommand* pCmd)
+	{
+		
+		pCmd->Release();
+	}
+};
+
 class ServerInterface
 {
 public:
@@ -121,6 +135,7 @@ class TCP_Server : public ServerInterface
 public:
 	TCP_Server(boost::asio::io_service& io_service)
 		: acceptor(io_service, boost::asio::ip::tcp::endpoint(boost::asio::ip::tcp::v4(), 33440))
+		, strand(io_service)
 		, isAccepting(false)
 	{
 		
@@ -208,6 +223,24 @@ public:
 			memcpy(send->message, pChat->message, 128);
 			WriteCommand* pCmd = WriteCommand::Create(send);
 			Broadcast(pCmd);
+
+			pCmd->Clone();
+
+			strand.dispatch([this, pCmd]()
+			{
+				auto data = pCmd->pData->Cast<ChatPacket>();
+
+				for (int i = 0; i < 10; ++i)
+				{
+					printf(data->message);
+					printf("\n");
+				}
+
+				Sleep(10);
+
+				pCmd->Release();
+			});
+
 			pCmd->Release();
 			break;
 		}
@@ -224,6 +257,19 @@ public:
 			send->velocity[1] = pMove->velocity[1];
 			WriteCommand* pCmd = WriteCommand::Create(send);
 			Broadcast(pCmd);
+
+			pCmd->Clone();
+			strand.get_io_service().dispatch(
+
+			strand.wrap([this, pCmd]()
+			{
+				printf("MOVE");
+				printf("MOVE");
+				printf("MOVE\n");
+			})
+
+			);
+
 			pCmd->Release();
 			break;
 		}
@@ -268,6 +314,7 @@ private:
 
 private:
 	boost::asio::ip::tcp::acceptor acceptor;
+	boost::asio::strand strand;
 	bool isAccepting;
 	std::vector<ServerSession*>	sessionList;
 	std::deque<std::size_t> sessionQueue;

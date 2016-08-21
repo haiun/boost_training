@@ -16,12 +16,6 @@ int main()
 	LoginPacket* packet = new LoginPacket();
 	client.PostWrite(false, WriteCommand::Create(packet));
 
-	while (std::cin >> inputBuffer)
-	{
-
-	}
-
-	/*
 	int i = 0;
 	while (true)
 	{
@@ -39,11 +33,10 @@ int main()
 		
 		ChatPacket* packet = new ChatPacket();
 		sprintf_s(packet->message, "%s %d", inputBuffer, i);
-		client.PostWrite(false, packet->size, new WriteCommand(packet));
+		client.PostWrite(false, WriteCommand::Create(packet));
 
 		Sleep(100);
 	}
-	*/
 
 	service.stop();
 
