@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 14
-VisualStudioVersion = 14.0.24720.0
+VisualStudioVersion = 14.0.25420.1
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "asio_app", "asio_app\asio_app.vcxproj", "{8DF3E0E0-257E-456C-BA7A-FA21BDBC4CA4}"
 EndProject
@@ -12,8 +12,6 @@ EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Client", "Client\Client.vcxproj", "{8F4353B9-130C-4475-A540-80EE5F338F3A}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Packet", "Packet\Packet.vcxproj", "{1FCD321C-9666-4605-B712-A6BC571FFBAE}"
-EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "MFCClient", "MFCClient\MFCClient.vcxproj", "{67D244B1-0BF1-4EC6-B732-0390186211ED}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -63,14 +61,6 @@ Global
 		{1FCD321C-9666-4605-B712-A6BC571FFBAE}.Release|x64.Build.0 = Release|x64
 		{1FCD321C-9666-4605-B712-A6BC571FFBAE}.Release|x86.ActiveCfg = Release|Win32
 		{1FCD321C-9666-4605-B712-A6BC571FFBAE}.Release|x86.Build.0 = Release|Win32
-		{67D244B1-0BF1-4EC6-B732-0390186211ED}.Debug|x64.ActiveCfg = Debug|x64
-		{67D244B1-0BF1-4EC6-B732-0390186211ED}.Debug|x64.Build.0 = Debug|x64
-		{67D244B1-0BF1-4EC6-B732-0390186211ED}.Debug|x86.ActiveCfg = Debug|Win32
-		{67D244B1-0BF1-4EC6-B732-0390186211ED}.Debug|x86.Build.0 = Debug|Win32
-		{67D244B1-0BF1-4EC6-B732-0390186211ED}.Release|x64.ActiveCfg = Release|x64
-		{67D244B1-0BF1-4EC6-B732-0390186211ED}.Release|x64.Build.0 = Release|x64
-		{67D244B1-0BF1-4EC6-B732-0390186211ED}.Release|x86.ActiveCfg = Release|Win32
-		{67D244B1-0BF1-4EC6-B732-0390186211ED}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
